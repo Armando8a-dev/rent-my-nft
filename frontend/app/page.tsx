@@ -6,6 +6,8 @@ import { parseEther, formatEther } from "viem";
 import { useState, useEffect } from "react";
 import { RENT_MY_NFT_ADDRESS, RENT_MY_NFT_ABI, TEST_NFT_ADDRESS, TEST_NFT_ABI } from "./abi";
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 export default function Home() {
   const { address, isConnected } = useAccount();
   const [txMsg, setTxMsg] = useState("");
@@ -15,9 +17,10 @@ export default function Home() {
   const [pricePerDay, setPricePerDay] = useState("0.001");
   const [maxDays, setMaxDays] = useState("7");
 
-  // Rent / lookup form
-  const [lookupTokenId, setLookupTokenId] = useState("0");
+  // Rent form — separate lookup token ID
+  const [lookupTokenId, setLookupTokenId] = useState("");
   const [numDays, setNumDays] = useState("1");
+  const [showRentalInfo, setShowRentalInfo] = useState(false);
 
   // Reclaim / cancel form
   const [manageTokenId, setManageTokenId] = useState("0");
@@ -32,11 +35,26 @@ export default function Home() {
     query: { enabled: listTokenId !== "" },
   });
 
-  const { data: rentalInfo, refetch: refetchRental } = useReadContract({
+  // Only fetch rental info when user clicks "Lookup"
+  const { data: rentalData, refetch: refetchRental } = useReadContract({
     address: RENT_MY_NFT_ADDRESS, abi: RENT_MY_NFT_ABI, functionName: "rentals",
     args: [TEST_NFT_ADDRESS, BigInt(lookupTokenId || "0")],
-    query: { enabled: lookupTokenId !== "" },
+    query: { enabled: false }, // manual trigger only
   });
+
+  // Positional tuple: [owner, pricePerDay, maxDays, renter, rentedUntil]
+  const rentalOwner   = rentalData?.[0] as string | undefined;
+  const rentalPrice   = rentalData?.[1] as bigint | undefined;
+  const rentalMaxDays = rentalData?.[2] as bigint | undefined;
+  const rentalRenter  = rentalData?.[3] as string | undefined;
+  const rentalUntil   = rentalData?.[4] as bigint | undefined;
+
+  const isListed = !!rentalOwner && rentalOwner !== ZERO_ADDRESS;
+  const rentalActive = isListed && !!rentalRenter && rentalRenter !== ZERO_ADDRESS &&
+    Number(rentalUntil ?? 0n) > Math.floor(Date.now() / 1000);
+  const totalCost = isListed && rentalPrice && rentalPrice > 0n
+    ? rentalPrice * BigInt(numDays || "1")
+    : 0n;
 
   const { writeContract, data: txHash, isPending } = useWriteContract();
   const { isSuccess } = useWaitForTransactionReceipt({ hash: txHash });
@@ -45,11 +63,11 @@ export default function Home() {
     if (isSuccess) {
       refetchTotal();
       refetchApproval();
-      refetchRental();
+      if (showRentalInfo) refetchRental();
       setTxMsg("Transaction confirmed!");
       setTimeout(() => setTxMsg(""), 4000);
     }
-  }, [isSuccess, refetchTotal, refetchApproval, refetchRental]);
+  }, [isSuccess, refetchTotal, refetchApproval, refetchRental, showRentalInfo]);
 
   const handleMint = () => {
     if (!address) return;
@@ -72,9 +90,11 @@ export default function Home() {
     });
   };
 
-  const totalCost = rentalInfo && rentalInfo[1] > 0n
-    ? rentalInfo[1] * BigInt(numDays || "1")
-    : 0n;
+  const handleLookup = async () => {
+    if (lookupTokenId === "") return;
+    await refetchRental();
+    setShowRentalInfo(true);
+  };
 
   const handleRent = () => {
     writeContract({
@@ -98,9 +118,6 @@ export default function Home() {
     });
   };
 
-  const rentalActive = rentalInfo && rentalInfo[3] !== "0x0000000000000000000000000000000000000000" &&
-    Number(rentalInfo[4]) > Math.floor(Date.now() / 1000);
-
   return (
     <main className="min-h-screen p-4 md:p-8 max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
@@ -118,22 +135,19 @@ export default function Home() {
         </div>
       ) : (
         <div className="space-y-4">
-          {/* Step 1: Mint test NFT */}
+          {/* Step 1: Mint */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 className="font-semibold mb-1 text-pink-400">1️⃣ Mint a Test NFT</h2>
             <p className="text-xs text-white/50 mb-4">
-              Total minted: <span className="text-white">{totalMinted?.toString() ?? "0"}</span> · Next token ID will be #{totalMinted?.toString() ?? "0"}
+              Total minted: <span className="text-white">{totalMinted?.toString() ?? "0"}</span> · Next ID will be #{totalMinted?.toString() ?? "0"}
             </p>
-            <button
-              onClick={handleMint}
-              disabled={isPending}
-              className="bg-pink-500 hover:bg-pink-400 disabled:opacity-40 text-black font-semibold px-6 py-2 rounded-xl transition-colors"
-            >
+            <button onClick={handleMint} disabled={isPending}
+              className="bg-pink-500 hover:bg-pink-400 disabled:opacity-40 text-black font-semibold px-6 py-2 rounded-xl transition-colors">
               {isPending ? "..." : "Mint TestNFT to my wallet"}
             </button>
           </div>
 
-          {/* Step 2: List for rent */}
+          {/* Step 2: List */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 className="font-semibold mb-4 text-pink-400">2️⃣ List NFT for Rent</h2>
             <div className="space-y-2">
@@ -142,79 +156,86 @@ export default function Home() {
                   <label className="text-xs text-white/50">Token ID</label>
                   <input type="number" min="0" value={listTokenId}
                     onChange={(e) => setListTokenId(e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400"
-                  />
+                    className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400" />
                 </div>
                 <div>
                   <label className="text-xs text-white/50">Price/day (ETH)</label>
                   <input type="number" min="0" step="0.001" value={pricePerDay}
                     onChange={(e) => setPricePerDay(e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400"
-                  />
+                    className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400" />
                 </div>
                 <div>
                   <label className="text-xs text-white/50">Max days</label>
                   <input type="number" min="1" value={maxDays}
                     onChange={(e) => setMaxDays(e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400"
-                  />
+                    className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400" />
                 </div>
               </div>
               <div className="flex gap-2 pt-1">
                 {needsApproval ? (
                   <button onClick={handleApprove} disabled={isPending}
                     className="flex-1 bg-pink-500 hover:bg-pink-400 disabled:opacity-40 text-black font-semibold py-2 rounded-xl transition-colors">
-                    {isPending ? "..." : "Approve"}
+                    {isPending ? "..." : "① Approve"}
                   </button>
                 ) : (
                   <button onClick={handleList} disabled={isPending}
                     className="flex-1 bg-pink-500 hover:bg-pink-400 disabled:opacity-40 text-black font-semibold py-2 rounded-xl transition-colors">
-                    {isPending ? "..." : "List for Rent"}
+                    {isPending ? "..." : "② List for Rent"}
                   </button>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Step 3: Rent an NFT */}
+          {/* Step 3: Rent */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 className="font-semibold mb-4 text-pink-400">3️⃣ Rent a Listed NFT</h2>
-            <div className="space-y-2">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2">
                   <label className="text-xs text-white/50">Token ID</label>
                   <input type="number" min="0" value={lookupTokenId}
-                    onChange={(e) => setLookupTokenId(e.target.value)}
+                    onChange={(e) => { setLookupTokenId(e.target.value); setShowRentalInfo(false); }}
                     className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400"
-                  />
+                    placeholder="e.g. 0" />
                 </div>
-                <div>
-                  <label className="text-xs text-white/50">Days</label>
-                  <input type="number" min="1" value={numDays}
-                    onChange={(e) => setNumDays(e.target.value)}
-                    className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400"
-                  />
+                <div className="flex flex-col justify-end">
+                  <button onClick={handleLookup} disabled={lookupTokenId === "" || isPending}
+                    className="bg-white/10 hover:bg-white/20 disabled:opacity-40 text-white font-semibold py-2 rounded-xl transition-colors text-sm">
+                    🔍 Lookup
+                  </button>
                 </div>
               </div>
-              {rentalInfo && rentalInfo[0] !== "0x0000000000000000000000000000000000000000" && (
+
+              {/* Rental info panel */}
+              {showRentalInfo && isListed && (
                 <div className="text-xs bg-white/5 rounded-xl p-3 space-y-1">
-                  <p className="text-white/50">Owner: <span className="text-white">{(rentalInfo[0] as string).slice(0,6)}...{(rentalInfo[0] as string).slice(-4)}</span></p>
-                  <p className="text-white/50">Price/day: <span className="text-pink-400">{formatEther(rentalInfo[1])} ETH</span></p>
-                  <p className="text-white/50">Max days: <span className="text-white">{rentalInfo[2].toString()}</span></p>
+                  <p className="text-white/50">Owner: <span className="text-white">{rentalOwner?.slice(0,6)}...{rentalOwner?.slice(-4)}</span></p>
+                  <p className="text-white/50">Price/day: <span className="text-pink-400">{rentalPrice ? formatEther(rentalPrice) : "0"} ETH</span></p>
+                  <p className="text-white/50">Max days: <span className="text-white">{rentalMaxDays?.toString()}</span></p>
                   <p className="text-white/50">Status: <span className={rentalActive ? "text-red-400" : "text-green-400"}>{rentalActive ? "🔴 Rented" : "🟢 Available"}</span></p>
-                  {!rentalActive && totalCost > 0n && (
-                    <p className="text-white/50">Total cost: <span className="text-white">{formatEther(totalCost)} ETH</span></p>
-                  )}
                 </div>
               )}
-              <button onClick={handleRent} disabled={isPending || rentalActive || totalCost === 0n}
+              {showRentalInfo && !isListed && (
+                <p className="text-xs text-white/40 text-center">No listing found for this token ID.</p>
+              )}
+
+              <div>
+                <label className="text-xs text-white/50">Days</label>
+                <input type="number" min="1" value={numDays}
+                  onChange={(e) => setNumDays(e.target.value)}
+                  className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400" />
+              </div>
+
+              <button onClick={handleRent}
+                disabled={isPending || !isListed || rentalActive || totalCost === 0n}
                 className="w-full bg-pink-500 hover:bg-pink-400 disabled:opacity-40 text-black font-semibold py-2 rounded-xl transition-colors">
-                {isPending ? "..." : `Rent for ${formatEther(totalCost)} ETH`}
+                {isPending ? "..." : isListed ? `Rent for ${formatEther(totalCost)} ETH` : "Lookup a listing first"}
               </button>
             </div>
           </div>
 
-          {/* Step 4: Manage listing */}
+          {/* Step 4: Cancel / Reclaim */}
           <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 className="font-semibold mb-4 text-pink-400">4️⃣ Cancel or Reclaim</h2>
             <div className="space-y-2">
@@ -222,8 +243,7 @@ export default function Home() {
                 <label className="text-xs text-white/50">Token ID</label>
                 <input type="number" min="0" value={manageTokenId}
                   onChange={(e) => setManageTokenId(e.target.value)}
-                  className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400"
-                />
+                  className="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-pink-400" />
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={handleCancel} disabled={isPending}
