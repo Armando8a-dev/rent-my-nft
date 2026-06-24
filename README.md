@@ -7,8 +7,8 @@
 ![Tests](https://img.shields.io/badge/tests-25%20passing-success)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-🔗 **Live demo:** _coming soon_
-📜 **Contract (Sepolia):** _deploy pending_
+🔗 **Live demo:** https://rent-my-nft-b9.netlify.app
+📜 **Contracts (Sepolia):** [RentMyNFT](https://sepolia.etherscan.io/address/0x13e6D28912ab30198fdE03627a6733cc877196eB) · [TestNFT](https://sepolia.etherscan.io/address/0x07B07622B952344BE8A77b79ff8fA965d5A62d38)
 
 ---
 
