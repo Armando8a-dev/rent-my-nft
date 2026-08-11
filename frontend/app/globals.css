@@ -1,7 +1,95 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #0b0616;          /* violet-black */
+  --acid: #ccff00;        /* the loot accent */
+  --acid-dim: rgba(204, 255, 0, 0.16);
+  --plasma: #b026ff;      /* rarity violet */
+  --hot: #ff2e88;         /* on-loan */
+  --ice: #22e0ff;
+}
+
+html, body { height: 100%; }
+
 body {
-  background: #0f0a14;
-  color: #ede6f7;
-  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: #eae6f5;
+  font-family: var(--font-ui), system-ui, sans-serif;
+  overflow-x: hidden;
+}
+
+.font-display { font-family: var(--font-display), var(--font-ui), sans-serif; }
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ── arena backdrop: vivid glows + hex mesh ───────────────────────────── */
+.arena {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(680px 520px at 12% 4%,  rgba(176, 38, 255, 0.30), transparent 62%),
+    radial-gradient(620px 480px at 88% 12%, rgba(204, 255, 0, 0.13), transparent 60%),
+    radial-gradient(700px 560px at 60% 96%, rgba(255, 46, 136, 0.18), transparent 62%);
+}
+.arena::after {
+  content: "";
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(204,255,0,0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(204,255,0,0.045) 1px, transparent 1px);
+  background-size: 40px 40px;
+  mask-image: radial-gradient(circle at 50% 30%, black, transparent 82%);
+  -webkit-mask-image: radial-gradient(circle at 50% 30%, black, transparent 82%);
+}
+
+/* ── inventory slot ───────────────────────────────────────────────────── */
+.slot {
+  position: relative;
+  background: linear-gradient(165deg, rgba(255,255,255,0.07), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.10);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 260ms cubic-bezier(.22,1,.36,1), box-shadow 260ms ease, border-color 260ms ease;
+}
+.slot:hover { transform: translateY(-6px); }
+
+/* clipped corner, like a game panel */
+.notch { clip-path: polygon(0 14px, 14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%); }
+
+.tier-available:hover { border-color: var(--acid); box-shadow: 0 0 0 1px var(--acid), 0 18px 50px rgba(204,255,0,0.18); }
+.tier-loan:hover      { border-color: var(--hot);  box-shadow: 0 0 0 1px var(--hot),  0 18px 50px rgba(255,46,136,0.20); }
+.tier-idle:hover      { border-color: var(--plasma); box-shadow: 0 0 0 1px var(--plasma), 0 18px 50px rgba(176,38,255,0.20); }
+
+/* ── glowing tags ─────────────────────────────────────────────────────── */
+.tag {
+  font-family: var(--font-display), sans-serif;
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  padding: 3px 9px; border: 1px solid currentColor; border-radius: 3px;
+}
+
+/* ── scanning sweep over the artwork ──────────────────────────────────── */
+@keyframes scan-y { 0% { transform: translateY(-110%); } 100% { transform: translateY(320%); } }
+.scanline {
+  position: absolute; left: 0; right: 0; height: 28%;
+  background: linear-gradient(180deg, transparent, rgba(204,255,0,0.14), transparent);
+  animation: scan-y 4.2s linear infinite;
+  pointer-events: none;
+}
+
+/* ── cooldown timer pulse ─────────────────────────────────────────────── */
+@keyframes cool { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.cooldown { animation: cool 1.4s ease-in-out infinite; }
+
+/* CTA */
+.cta {
+  background: var(--acid); color: #10130a;
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  box-shadow: 0 0 24px rgba(204,255,0,0.35);
+  transition: filter 200ms ease, box-shadow 200ms ease;
+}
+.cta:hover:not(:disabled) { filter: brightness(1.1); box-shadow: 0 0 34px rgba(204,255,0,0.55); }
+.cta:disabled { box-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .scanline, .cooldown { animation: none; }
+  .slot:hover { transform: none; }
 }
